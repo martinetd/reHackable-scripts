@@ -90,16 +90,43 @@ if [ -f $OUTPUT ]; then
   OUTPUT="$filename-$index$extension"
 fi
 
-# grab framebuffer from reMarkable
-ssh root@$ADDRESS $SSH_OPT "cat /dev/fb0" | \
+pixel_format="gray8"
+width=1872
+height=1404
+bytes_per_pixel=1
+
+# calculate how much bytes the window is
+window_bytes="$((width * height * bytes_per_pixel))"
+
+# find xochitl's process
+pid="$(ssh remarkable pidof xochitl)"
+
+# find framebuffer location in memory
+# it is actually the map allocated _after_ the fb0 mmap
+read_address="grep -A1 '/dev/fb0' /proc/$pid/maps | tail -n1 | sed 's/-.*$//'"
+skip_bytes_hex="$(ssh remarkable "$read_address")"
+skip_bytes="$((0x$skip_bytes_hex + 8))"
+
+# carve the framebuffer out of the process memory
+page_size=4096
+window_start_blocks="$((skip_bytes / page_size))"
+window_offset="$((skip_bytes % page_size))"
+window_length_blocks="$((window_bytes / page_size + 1))"
+
+# Using dd with bs=1 is too slow, so we first carve out the pages our desired
+# bytes are located in, and then we trim the resulting data with what we need.
+ssh remarkable "dd if=/proc/$pid/mem bs=$page_size skip=$window_start_blocks count=$window_length_blocks 2>/dev/null |
+  /opt/bin/zstd" | zstd -d |
+  tail -c+$window_offset | head -c $window_bytes |
   ffmpeg -vcodec rawvideo \
        -loglevel panic \
        -f rawvideo \
-       -pix_fmt gray16le \
-       -s 1408,1872 \
+       -pix_fmt $pixel_format \
+       -s $width,$height \
        -i - \
        -vframes 1 \
        -f image2 \
+       -vf transpose=2 \
        -vcodec mjpeg $OUTPUT
 
 if [ ! -f "$OUTPUT" ]; then
