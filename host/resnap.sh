@@ -49,15 +49,6 @@ while (( "$#" )); do
       ADDRESS=$2
       shift 2
       ;;
-    -f)
-	pid=$2
-	skip_bytes_hex=$3
-	shift 3
-	;;
-    -F)
-	PRINTFAST=1
-	shift
-	;;
     -i)
         SSH_OPT="-i $2"
         shift 2
@@ -109,28 +100,13 @@ bytes_per_pixel=1
 # calculate how much bytes the window is
 window_bytes="$((width * height * bytes_per_pixel))"
 
-# find xochitl's process
-[[ -n "$pid" ]] || pid="$($SSH_CMD pidof xochitl)"
-
-# find framebuffer location in memory
-# it is actually the map allocated _after_ the fb0 mmap
-read_address="grep -A1 '/dev/fb0' /proc/$pid/maps | tail -n1 | sed 's/-.*$//'"
-[[ -n "$skip_bytes_hex" ]] || skip_bytes_hex="$($SSH_CMD "$read_address")"
-skip_bytes="$((0x$skip_bytes_hex + 8))"
-
-# carve the framebuffer out of the process memory
-page_size=4096
-window_start_blocks="$((skip_bytes / page_size))"
-window_offset="$((skip_bytes % page_size))"
-window_length_blocks="$((window_bytes / page_size + 1))"
-
-[[ -n "$PRINTFAST" ]] && echo $pid $skip_bytes_hex
-
-# Using dd with bs=1 is too slow, so we first carve out the pages our desired
-# bytes are located in, and then we trim the resulting data with what we need.
-$SSH_CMD "dd if=/proc/$pid/mem bs=$page_size skip=$window_start_blocks count=$window_length_blocks 2>/dev/null |
-  /opt/bin/zstd" | zstd -d |
-  tail -c+$window_offset | head -c $window_bytes |
+echo "
+pid=\$(pidof xochitl)
+offset=\$(awk -F- '/\/dev\/fb0/ { getline; print \"0x\" \$1; } ' < /proc/\$pid/maps)
+{ dd bs=1 skip=\$((offset)) count=0; dd bs=$window_bytes count=1; } < /proc/\$pid/mem 2>/dev/null |
+  /opt/bin/zstd
+" | $SSH_CMD |
+  zstd -d |
   ffmpeg -vcodec rawvideo \
        -loglevel panic \
        -f rawvideo \
