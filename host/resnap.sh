@@ -105,7 +105,7 @@ pid=\$(pidof xochitl)
 offset=\$(awk -F- '/\/dev\/fb0/ { getline; print \"0x\" \$1; } ' < /proc/\$pid/maps)
 { dd bs=1 skip=\$((offset)) count=0; dd bs=$window_bytes count=1; } < /proc/\$pid/mem 2>/dev/null |
   /opt/bin/zstd
-" | $SSH_CMD |
+" | $SSH_CMD -T |
   zstd -d |
   ffmpeg -vcodec rawvideo \
        -loglevel panic \
