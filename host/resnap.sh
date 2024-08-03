@@ -92,10 +92,14 @@ if [ -f $OUTPUT ]; then
   OUTPUT="$filename-$index$extension"
 fi
 
-pixel_format="gray8"
 width=1872
 height=1404
-bytes_per_pixel=1
+#pixel_format="gray8"
+#bytes_per_pixel=1
+#filter=transpose=2
+pixel_format=gray16
+bytes_per_pixel=2
+filter="transpose=3,curves=all=0.045/0 0.06/1"
 
 # calculate how much bytes the window is
 window_bytes="$((width * height * bytes_per_pixel))"
@@ -103,19 +107,20 @@ window_bytes="$((width * height * bytes_per_pixel))"
 echo "
 pid=\$(pidof xochitl)
 offset=\$(awk -F- '/\/dev\/fb0/ { getline; print \"0x\" \$1; } ' < /proc/\$pid/maps)
-{ dd bs=1 skip=\$((offset)) count=0; dd bs=$window_bytes count=1; } < /proc/\$pid/mem 2>/dev/null |
+{ dd bs=1 skip=\$((offset+7)) count=0; dd bs=$window_bytes count=1; } < /proc/\$pid/mem 2>/dev/null |
   /opt/bin/zstd
 " | $SSH_CMD -T |
   zstd -d |
   ffmpeg -vcodec rawvideo \
        -loglevel panic \
+       -y \
        -f rawvideo \
-       -pix_fmt $pixel_format \
-       -s $width,$height \
+       -pixel_format $pixel_format \
+       -video_size $width,$height \
        -i - \
        -vframes 1 \
        -f image2 \
-       -vf transpose=2 \
+       -vf "$filter" \
        "$OUTPUT"
 
 if [ ! -f "$OUTPUT" ]; then
