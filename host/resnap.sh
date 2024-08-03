@@ -25,10 +25,10 @@ VERSION="1.0"
 
 # Usage
 function usage {
-  echo "Usage: resnap.sh [-h | --help] [-v | --version] [-r ssh_address] [output_jpg]"
+  echo "Usage: resnap.sh [-h | --help] [-v | --version] [-r ssh_address] [output_png]"
   echo
   echo "Arguments:"
-  echo -e "output_jpg\tFile to save screenshot to (default resnap.jpg)"
+  echo -e "output_png\tFile to save screenshot to (default resnap.png)"
   echo -e "-v --version\tDisplay version and exit"
   echo -e "-i\t\tpath to ssh pubkey"
   echo -e "-r\t\tAddress of reMarkable (default 10.11.99.1)"
@@ -40,7 +40,7 @@ function usage {
 ADDRESS=10.11.99.1
 
 # default output file
-OUTPUT=resnap.jpg
+OUTPUT=resnap.png
 
 PARAMS=""
 while (( "$#" )); do
@@ -116,7 +116,7 @@ offset=\$(awk -F- '/\/dev\/fb0/ { getline; print \"0x\" \$1; } ' < /proc/\$pid/m
        -vframes 1 \
        -f image2 \
        -vf transpose=2 \
-       -vcodec mjpeg $OUTPUT
+       "$OUTPUT"
 
 if [ ! -f "$OUTPUT" ]; then
   echo "resnap: Error: Failed to capture screenshot"
